@@ -1,15 +1,15 @@
 #include <vslc.h>
 
 // Declaration of global symbol table
-symbol_table_t* global_symbols;
+symbol_table_t *global_symbols;
 
 // Declarations of helper functions defined further down in this file
 static void find_globals(void);
-static void bind_names(symbol_table_t* local_symbols, node_t* root);
-static void print_symbol_table(symbol_table_t* table, int nesting);
+static void bind_names(symbol_table_t *local_symbols, node_t *root);
+static void print_symbol_table(symbol_table_t *table, int nesting);
 static void destroy_symbol_tables(void);
 
-static size_t add_string(char* string);
+static size_t add_string(char *string);
 static void print_string_list(void);
 static void destroy_string_list(void);
 
@@ -20,13 +20,25 @@ static void destroy_string_list(void);
 // All strings are entered into the string_list
 void create_tables(void)
 {
+  find_globals();
+  // bind_names()
+
+  // for (size_t i = 0; i < global_symbols->n_symbols; i++)
+  // {
+  //   symbol_t *symbol = global_symbols->symbols[i];
+  //   if (symbol->type == SYMBOL_FUNCTION)
+  //   {
+  //     bind_names(symbol->function_symtable, symbol->node->children[1]);
+  //   }
+  // }
+
   // TODO:
   // First use find_globals() to create the global symbol table.
   // As global symbols are added, function symbols get their own local symbol tables as well.
   //
   // Once all global symbols are added, go through all functions bodies and bind references.
   //
-  // Binding should performed by bind_names(function symbol table, function body AST node).
+  // Binding should be performed by bind_names(function symbol table, function body AST node).
   // IDENTIFIERs that reference declarations should point to the symbol_t they reference.
   // It handles pushing and popping scopes, and adding variables to the local symbol table.
   // A final task performed by bind_names(...), is adding strings to the global string list.
@@ -59,6 +71,50 @@ static void find_globals(void)
 {
   global_symbols = symbol_table_init();
 
+  for (size_t i = 0; i < root->n_children; i++)
+  {
+    node_t *node = root->children[i];
+
+    if (node->type == SYMBOL_LOCAL_VAR)
+    {
+      symbol_t *symbol = malloc(sizeof(symbol_t));
+
+      // symbol->name = node->data.identifier;
+      symbol->type = SYMBOL_GLOBAL_VAR;
+      symbol->node = node;
+      symbol->function_symtable = NULL;
+
+      symbol_table_insert(global_symbols, symbol);
+      continue;
+    }
+
+    if (node->type == SYMBOL_GLOBAL_ARRAY)
+    {
+      symbol_t *symbol = malloc(sizeof(symbol_t));
+
+      // symbol->name = "my_array";
+      symbol->type = SYMBOL_GLOBAL_ARRAY;
+      symbol->node = node;
+      symbol->function_symtable = NULL;
+
+      symbol_table_insert(global_symbols, symbol);
+      continue;
+    }
+
+    if (node->type == SYMBOL_FUNCTION)
+    {
+      symbol_t *symbol = malloc(sizeof(symbol_t));
+
+      // symbol->name = "my_func";
+      symbol->type = SYMBOL_FUNCTION;
+      symbol->node = node;
+      symbol->function_symtable = symbol_table_init();
+
+      symbol_table_insert(global_symbols, symbol);
+      continue;
+    }
+  }
+
   // TODO: Create symbols for all global defintions (global variables, arrays and functions),
   // and add them to the global symbol table. See the symtype_t enum in "symbols.h"
 
@@ -81,7 +137,7 @@ static void find_globals(void)
 //  - Moves STRING_LITERAL nodes' data into the global string list,
 //    and replaces the node with a STRING_LIST_REFERENCE node.
 //    Overwrites the node's data.string_list_index field with with string list index
-static void bind_names(symbol_table_t* local_symbols, node_t* node)
+static void bind_names(symbol_table_t *local_symbols, node_t *node)
 {
   // TODO: Implement bind_names, doing all the things described above
   // Tip: See symbol_hashmap_init() in symbol_table.h, to make new hashmaps for new scopes.
@@ -102,11 +158,11 @@ static void bind_names(symbol_table_t* local_symbols, node_t* node)
 
 // Prints the given symbol table, with sequence number, symbol names and types.
 // When printing function symbols, its local symbol table is recursively printed, with indentation.
-static void print_symbol_table(symbol_table_t* table, int nesting)
+static void print_symbol_table(symbol_table_t *table, int nesting)
 {
   for (size_t i = 0; i < table->n_symbols; i++)
   {
-    symbol_t* symbol = table->symbols[i];
+    symbol_t *symbol = table->symbols[i];
 
     printf(
         "%*s%ld: %s(%s)\n",
@@ -132,13 +188,13 @@ static void destroy_symbol_tables(void)
 }
 
 // Declaration of global string list
-char** string_list;
+char **string_list;
 size_t string_list_len;
 static size_t string_list_capacity;
 
 // Adds the given string to the global string list, resizing if needed.
 // Takes ownership of the string, and returns its position in the string list.
-static size_t add_string(char* string)
+static size_t add_string(char *string)
 {
   // TODO: Write a helper function you can use during bind_names(),
   // to easily add a string into the dynamically growing string_list.
