@@ -115,7 +115,6 @@ static void find_globals(void)
 
     if (node->type == FUNCTION)
     {
-      size_t children = node->n_children;
       symbol_t *symbol = malloc(sizeof(symbol_t));
       symbol_table_t *function_symtable = symbol_table_init();
 
@@ -192,15 +191,14 @@ static void bind_names(symbol_table_t *local_symbols, node_t *node)
 
   if (node->type == STRING_LITERAL)
   {
-    size_t *position = malloc(sizeof(int64_t));
-    *position = add_string(node->data.string_literal);
+    size_t position = add_string(node->data.string_literal);
+    node->type = STRING_LIST_REFERENCE;
     node->data.string_list_index = position;
     return;
   }
 
   if (node->type == BLOCK)
   {
-
     if (node->n_children != 2)
     {
       bind_names(local_symbols, node->children[0]);
@@ -308,11 +306,31 @@ static size_t string_list_capacity;
 // Takes ownership of the string, and returns its position in the string list.
 static size_t add_string(char *string)
 {
-  if (string_list_len + 1 >= string_list_capacity)
+  if (string_list_len == string_list_capacity)
   {
-    string_list_capacity = (string_list_capacity * 2) + 8;
-    string_list = realloc(string_list, string_list_capacity * sizeof(char *));
+    size_t updated_capacity;
+
+    if (!string_list_capacity)
+    {
+      updated_capacity = 1;
+    }
+    else
+    {
+      updated_capacity = string_list_capacity * 2;
+    }
+
+    char **updated_list = realloc(string_list, updated_capacity * sizeof(char *));
+
+    if (!updated_list)
+    {
+      printf("realloc failed!\n");
+      exit(EXIT_FAILURE);
+    }
+
+    string_list = updated_list;
+    string_list_capacity = updated_capacity;
   }
+
   string_list[string_list_len] = string;
   return string_list_len++;
 
