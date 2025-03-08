@@ -21,9 +21,19 @@ static void destroy_string_list(void);
 void create_tables(void)
 {
   find_globals();
-  // bind_names()
 
-  // TODO:
+  for (size_t i = 0; i < global_symbols->n_symbols; i++)
+  {
+    symbol_t *symbol = global_symbols->symbols[i];
+
+    if (symbol->type != SYMBOL_FUNCTION)
+    {
+      continue;
+    }
+
+    bind_names(symbol->function_symtable, symbol->node->children[2]);
+  }
+
   // First use find_globals() to create the global symbol table.
   // As global symbols are added, function symbols get their own local symbol tables as well.
   //
@@ -68,27 +78,29 @@ static void find_globals(void)
 
     if (node->type == GLOBAL_DECLARATION)
     {
-      printf("GLOBAL_DECLARATION\n");
-      size_t children = node->n_children;
+      node_t *node_child = node->children[0];
 
-      // printf("children: %ld\n", node->children[0]->n_children);
-      // printf("children-type: %ld\n", node->children[0]->data);
-
-      symbol_t *symbol = malloc(sizeof(symbol_t));
-
-      for (size_t j = 0; j < node->children[0]->n_children; j++)
+      for (size_t j = 0; j < node_child->n_children; j++)
       {
-        node_t *child = node->children[0]->children[j];
-        printf("child->type: %d\n", child->type);
-        printf("child->data.identifier: %s\n", child->data.identifier);
-        continue;
+        symbol_t *symbol = malloc(sizeof(symbol_t));
+        node_t *child = node_child->children[j];
 
-        if (child->type != VARIABLE)
+        if (child->type == ARRAY_INDEXING)
+        {
+          symbol->name = child->children[0]->data.identifier;
+          symbol->type = SYMBOL_GLOBAL_ARRAY;
+          symbol->node = child;
+          symbol->function_symtable = NULL;
+
+          symbol_table_insert(global_symbols, symbol);
+          continue;
+        }
+
+        if (child->type != IDENTIFIER)
         {
           continue;
         }
 
-        printf("child->data.identifier: %s\n", child->data.identifier);
         symbol->name = child->data.identifier;
         symbol->type = SYMBOL_GLOBAL_VAR;
         symbol->node = child;
@@ -101,39 +113,40 @@ static void find_globals(void)
 
     if (node->type == FUNCTION)
     {
-      // printf("FUNCTION\n");
       size_t children = node->n_children;
       // printf("children: %ld\n", children);
 
       symbol_t *symbol = malloc(sizeof(symbol_t));
+      symbol_table_t *function_symtable = symbol_table_init();
+      function_symtable->hashmap->backup = global_symbols->hashmap;
 
-      // handle parameters
+      node_t *parameters = node->children[1];
+      for (size_t j = 0; j < parameters->n_children; j++)
+      {
+        symbol_t *parameter_symbol = malloc(sizeof(symbol_t));
+        node_t *parameter = parameters->children[j];
+
+        printf("parameter: %s\n", parameter->data.identifier);
+
+        parameter_symbol->name = parameter->data.identifier;
+        parameter_symbol->type = SYMBOL_PARAMETER;
+        parameter_symbol->node = parameter;
+        // parameter_symbol->function_symtable = NULL;
+
+        symbol_table_insert(function_symtable, parameter_symbol);
+      }
+
       symbol->name = node->children[0]->data.identifier;
       symbol->type = SYMBOL_FUNCTION;
       symbol->node = node;
-      symbol->function_symtable = symbol_table_init();
+      symbol->function_symtable = function_symtable;
 
       symbol_table_insert(global_symbols, symbol);
       continue;
     }
-
-    // if (node->type == LIST)
-    // {
-    //   printf("LIST\n");
-    //   symbol_t *symbol = malloc(sizeof(symbol_t));
-    //   // node_t *child = node->children[0];
-
-    //   // symbol->name = child->data.identifier;
-    //   symbol->type = SYMBOL_GLOBAL_ARRAY;
-    //   symbol->node = node;
-    //   symbol->function_symtable = NULL;
-
-    //   symbol_table_insert(global_symbols, symbol);
-    //   continue;
-    // }
   }
 
-  // TODO: Create symbols for all global defintions (global variables, arrays and functions),
+  // Create symbols for all global defintions (global variables, arrays and functions),
   // and add them to the global symbol table. See the symtype_t enum in "symbols.h"
 
   // When creating a symbol for a function, also create a local symbol_table_t for it.
@@ -157,6 +170,7 @@ static void find_globals(void)
 //    Overwrites the node's data.string_list_index field with with string list index
 static void bind_names(symbol_table_t *local_symbols, node_t *node)
 {
+
   // TODO: Implement bind_names, doing all the things described above
   // Tip: See symbol_hashmap_init() in symbol_table.h, to make new hashmaps for new scopes.
   // Remember the symbol_hashmap_t's backup pointer, forming a linked list of backup hashmaps.
