@@ -1,5 +1,5 @@
 run: build exec
-exec: simple-globals
+exec: shadowing
 build: empty c_build
 empty:
 

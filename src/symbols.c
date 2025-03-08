@@ -8,6 +8,8 @@ static void find_globals(void);
 static void bind_names(symbol_table_t *local_symbols, node_t *root);
 static void print_symbol_table(symbol_table_t *table, int nesting);
 static void destroy_symbol_tables(void);
+static void push_local_scope(symbol_table_t *table);
+static void pop_local_scope(symbol_table_t *table);
 
 static size_t add_string(char *string);
 static void print_string_list(void);
@@ -114,10 +116,9 @@ static void find_globals(void)
     if (node->type == FUNCTION)
     {
       size_t children = node->n_children;
-      // printf("children: %ld\n", children);
-
       symbol_t *symbol = malloc(sizeof(symbol_t));
       symbol_table_t *function_symtable = symbol_table_init();
+
       function_symtable->hashmap->backup = global_symbols->hashmap;
 
       node_t *parameters = node->children[1];
@@ -126,12 +127,9 @@ static void find_globals(void)
         symbol_t *parameter_symbol = malloc(sizeof(symbol_t));
         node_t *parameter = parameters->children[j];
 
-        printf("parameter: %s\n", parameter->data.identifier);
-
         parameter_symbol->name = parameter->data.identifier;
         parameter_symbol->type = SYMBOL_PARAMETER;
         parameter_symbol->node = parameter;
-        // parameter_symbol->function_symtable = NULL;
 
         symbol_table_insert(function_symtable, parameter_symbol);
       }
@@ -161,6 +159,20 @@ static void find_globals(void)
   // but we will not be testing your compiler on invalid VSL.
 }
 
+void push_local_scope(symbol_table_t *table)
+{
+  symbol_hashmap_t *hashmap = symbol_hashmap_init();
+  hashmap->backup = table->hashmap;
+  table->hashmap = hashmap;
+}
+
+void pop_local_scope(symbol_table_t *table)
+{
+  symbol_hashmap_t *hashmap = table->hashmap;
+  table->hashmap = hashmap->backup;
+  symbol_hashmap_destroy(hashmap);
+}
+
 // A recursive function that traverses the body of a function, and:
 //  - Adds variable declarations to the function's local symbol table.
 //  - Pushes and pops local variable scopes when entering and leaving blocks.
@@ -171,7 +183,62 @@ static void find_globals(void)
 static void bind_names(symbol_table_t *local_symbols, node_t *node)
 {
 
-  // TODO: Implement bind_names, doing all the things described above
+  if (node->type == IDENTIFIER)
+  {
+    symbol_t *symbol = symbol_hashmap_lookup(local_symbols->hashmap, node->data.identifier);
+    node->symbol = symbol;
+    return;
+  }
+
+  if (node->type == STRING_LITERAL)
+  {
+    size_t *position = malloc(sizeof(int64_t));
+    *position = add_string(node->data.string_literal);
+    node->data.string_list_index = position;
+    return;
+  }
+
+  if (node->type == BLOCK)
+  {
+
+    if (node->n_children != 2)
+    {
+      bind_names(local_symbols, node->children[0]);
+      return;
+    }
+
+    push_local_scope(local_symbols);
+
+    node_t *declaration_list = node->children[0];
+    for (int i = 0; i < declaration_list->n_children; i++)
+    {
+      node_t *declaration = declaration_list->children[i];
+
+      for (int j = 0; j < declaration->n_children; j++)
+      {
+        node_t *child = declaration->children[j];
+        symbol_t *local_variable_symbol = malloc(sizeof(symbol_t));
+
+        local_variable_symbol->name = child->data.identifier;
+        local_variable_symbol->type = SYMBOL_LOCAL_VAR;
+        local_variable_symbol->node = child;
+        local_variable_symbol->function_symtable = local_symbols;
+
+        symbol_table_insert(local_symbols, local_variable_symbol);
+      }
+    }
+
+    bind_names(local_symbols, node->children[1]);
+    pop_local_scope(local_symbols);
+    return;
+  }
+
+  for (size_t i = 0; i < node->n_children; i++)
+  {
+    bind_names(local_symbols, node->children[i]);
+  }
+
+  // Implement bind_names, doing all the things described above
   // Tip: See symbol_hashmap_init() in symbol_table.h, to make new hashmaps for new scopes.
   // Remember the symbol_hashmap_t's backup pointer, forming a linked list of backup hashmaps.
   // Can you use this linked list to implement a stack of hash maps?
@@ -213,7 +280,20 @@ static void print_symbol_table(symbol_table_t *table, int nesting)
 // Frees up the memory used by the global symbol table, all local symbol tables, and their symbols
 static void destroy_symbol_tables(void)
 {
-  // TODO: Implement cleanup. All symbols in the program are owned by exactly one symbol table.
+  for (size_t i = 0; i < global_symbols->n_symbols; i++)
+  {
+    symbol_t *symbol = global_symbols->symbols[i];
+
+    if (symbol == NULL || symbol->type != SYMBOL_FUNCTION)
+    {
+      continue;
+    }
+
+    symbol_table_destroy(symbol->function_symtable);
+  }
+
+  symbol_table_destroy(global_symbols);
+  // Implement cleanup. All symbols in the program are owned by exactly one symbol table.
 
   // TIP: Using symbol_table_destroy() goes a long way, but it only cleans up the given table.
   // Try cleaning up all local symbol tables before cleaning up the global one.
@@ -228,7 +308,15 @@ static size_t string_list_capacity;
 // Takes ownership of the string, and returns its position in the string list.
 static size_t add_string(char *string)
 {
-  // TODO: Write a helper function you can use during bind_names(),
+  if (string_list_len + 1 >= string_list_capacity)
+  {
+    string_list_capacity = (string_list_capacity * 2) + 8;
+    string_list = realloc(string_list, string_list_capacity * sizeof(char *));
+  }
+  string_list[string_list_len] = string;
+  return string_list_len++;
+
+  // Write a helper function you can use during bind_names(),
   // to easily add a string into the dynamically growing string_list.
 
   // The length of the string list should be stored in string_list_len.
@@ -251,5 +339,10 @@ static void print_string_list(void)
 // Frees all strings in the global string list, and the string list itself
 static void destroy_string_list(void)
 {
-  // TODO: Called during cleanup, free strings, and the memory used by the string list itself
+  for (int i = 0; i < string_list_len; i++)
+  {
+    free(string_list[i]);
+  }
+  free(string_list);
+  // Called during cleanup, free strings, and the memory used by the string list itself
 }
