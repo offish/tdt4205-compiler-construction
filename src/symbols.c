@@ -23,15 +23,6 @@ void create_tables(void)
   find_globals();
   // bind_names()
 
-  // for (size_t i = 0; i < global_symbols->n_symbols; i++)
-  // {
-  //   symbol_t *symbol = global_symbols->symbols[i];
-  //   if (symbol->type == SYMBOL_FUNCTION)
-  //   {
-  //     bind_names(symbol->function_symtable, symbol->node->children[1]);
-  //   }
-  // }
-
   // TODO:
   // First use find_globals() to create the global symbol table.
   // As global symbols are added, function symbols get their own local symbol tables as well.
@@ -75,37 +66,49 @@ static void find_globals(void)
   {
     node_t *node = root->children[i];
 
-    if (node->type == SYMBOL_LOCAL_VAR)
+    if (node->type == GLOBAL_DECLARATION)
     {
+      printf("GLOBAL_DECLARATION\n");
+      size_t children = node->n_children;
+
+      // printf("children: %ld\n", node->children[0]->n_children);
+      // printf("children-type: %ld\n", node->children[0]->data);
+
       symbol_t *symbol = malloc(sizeof(symbol_t));
 
-      // symbol->name = node->data.identifier;
-      symbol->type = SYMBOL_GLOBAL_VAR;
-      symbol->node = node;
-      symbol->function_symtable = NULL;
+      for (size_t j = 0; j < node->children[0]->n_children; j++)
+      {
+        node_t *child = node->children[0]->children[j];
+        printf("child->type: %d\n", child->type);
+        printf("child->data.identifier: %s\n", child->data.identifier);
+        continue;
 
-      symbol_table_insert(global_symbols, symbol);
+        if (child->type != VARIABLE)
+        {
+          continue;
+        }
+
+        printf("child->data.identifier: %s\n", child->data.identifier);
+        symbol->name = child->data.identifier;
+        symbol->type = SYMBOL_GLOBAL_VAR;
+        symbol->node = child;
+        symbol->function_symtable = NULL;
+
+        symbol_table_insert(global_symbols, symbol);
+      }
       continue;
     }
 
-    if (node->type == SYMBOL_GLOBAL_ARRAY)
+    if (node->type == FUNCTION)
     {
+      // printf("FUNCTION\n");
+      size_t children = node->n_children;
+      // printf("children: %ld\n", children);
+
       symbol_t *symbol = malloc(sizeof(symbol_t));
 
-      // symbol->name = "my_array";
-      symbol->type = SYMBOL_GLOBAL_ARRAY;
-      symbol->node = node;
-      symbol->function_symtable = NULL;
-
-      symbol_table_insert(global_symbols, symbol);
-      continue;
-    }
-
-    if (node->type == SYMBOL_FUNCTION)
-    {
-      symbol_t *symbol = malloc(sizeof(symbol_t));
-
-      // symbol->name = "my_func";
+      // handle parameters
+      symbol->name = node->children[0]->data.identifier;
       symbol->type = SYMBOL_FUNCTION;
       symbol->node = node;
       symbol->function_symtable = symbol_table_init();
@@ -113,6 +116,21 @@ static void find_globals(void)
       symbol_table_insert(global_symbols, symbol);
       continue;
     }
+
+    // if (node->type == LIST)
+    // {
+    //   printf("LIST\n");
+    //   symbol_t *symbol = malloc(sizeof(symbol_t));
+    //   // node_t *child = node->children[0];
+
+    //   // symbol->name = child->data.identifier;
+    //   symbol->type = SYMBOL_GLOBAL_ARRAY;
+    //   symbol->node = node;
+    //   symbol->function_symtable = NULL;
+
+    //   symbol_table_insert(global_symbols, symbol);
+    //   continue;
+    // }
   }
 
   // TODO: Create symbols for all global defintions (global variables, arrays and functions),
