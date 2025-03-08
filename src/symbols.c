@@ -113,34 +113,35 @@ static void find_globals(void)
       continue;
     }
 
-    if (node->type == FUNCTION)
+    if (node->type != FUNCTION)
     {
-      symbol_t *symbol = malloc(sizeof(symbol_t));
-      symbol_table_t *function_symtable = symbol_table_init();
-
-      function_symtable->hashmap->backup = global_symbols->hashmap;
-
-      node_t *parameters = node->children[1];
-      for (size_t j = 0; j < parameters->n_children; j++)
-      {
-        symbol_t *parameter_symbol = malloc(sizeof(symbol_t));
-        node_t *parameter = parameters->children[j];
-
-        parameter_symbol->name = parameter->data.identifier;
-        parameter_symbol->type = SYMBOL_PARAMETER;
-        parameter_symbol->node = parameter;
-
-        symbol_table_insert(function_symtable, parameter_symbol);
-      }
-
-      symbol->name = node->children[0]->data.identifier;
-      symbol->type = SYMBOL_FUNCTION;
-      symbol->node = node;
-      symbol->function_symtable = function_symtable;
-
-      symbol_table_insert(global_symbols, symbol);
       continue;
     }
+
+    symbol_t *symbol = malloc(sizeof(symbol_t));
+    symbol_table_t *function_symtable = symbol_table_init();
+
+    function_symtable->hashmap->backup = global_symbols->hashmap;
+
+    node_t *parameters = node->children[1];
+    for (size_t j = 0; j < parameters->n_children; j++)
+    {
+      symbol_t *parameter_symbol = malloc(sizeof(symbol_t));
+      node_t *parameter = parameters->children[j];
+
+      parameter_symbol->name = parameter->data.identifier;
+      parameter_symbol->type = SYMBOL_PARAMETER;
+      parameter_symbol->node = parameter;
+
+      symbol_table_insert(function_symtable, parameter_symbol);
+    }
+
+    symbol->name = node->children[0]->data.identifier;
+    symbol->type = SYMBOL_FUNCTION;
+    symbol->node = node;
+    symbol->function_symtable = function_symtable;
+
+    symbol_table_insert(global_symbols, symbol);
   }
 
   // Create symbols for all global defintions (global variables, arrays and functions),
@@ -181,6 +182,10 @@ void pop_local_scope(symbol_table_t *table)
 //    Overwrites the node's data.string_list_index field with with string list index
 static void bind_names(symbol_table_t *local_symbols, node_t *node)
 {
+  if (node == NULL)
+  {
+    return;
+  }
 
   if (node->type == IDENTIFIER)
   {
@@ -197,44 +202,50 @@ static void bind_names(symbol_table_t *local_symbols, node_t *node)
     return;
   }
 
-  if (node->type == BLOCK)
+  if (node->type != BLOCK)
   {
-    if (node->n_children != 2)
+    for (size_t i = 0; i < node->n_children; i++)
     {
-      bind_names(local_symbols, node->children[0]);
-      return;
+      bind_names(local_symbols, node->children[i]);
     }
-
-    push_local_scope(local_symbols);
-
-    node_t *declaration_list = node->children[0];
-    for (int i = 0; i < declaration_list->n_children; i++)
-    {
-      node_t *declaration = declaration_list->children[i];
-
-      for (int j = 0; j < declaration->n_children; j++)
-      {
-        node_t *child = declaration->children[j];
-        symbol_t *local_variable_symbol = malloc(sizeof(symbol_t));
-
-        local_variable_symbol->name = child->data.identifier;
-        local_variable_symbol->type = SYMBOL_LOCAL_VAR;
-        local_variable_symbol->node = child;
-        local_variable_symbol->function_symtable = local_symbols;
-
-        symbol_table_insert(local_symbols, local_variable_symbol);
-      }
-    }
-
-    bind_names(local_symbols, node->children[1]);
-    pop_local_scope(local_symbols);
     return;
   }
 
-  for (size_t i = 0; i < node->n_children; i++)
+  push_local_scope(local_symbols);
+
+  if (node->n_children == 1)
   {
-    bind_names(local_symbols, node->children[i]);
+    bind_names(local_symbols, node->children[0]);
   }
+  else if (node->n_children == 2)
+  {
+    node_t *var_list = node->children[0];
+    node_t *stmt_list = node->children[1];
+
+    for (size_t i = 0; i < var_list->n_children; i++)
+    {
+      for (size_t j = 0; j < var_list->children[i]->n_children; j++)
+      {
+        node_t *var_decl = var_list->children[i]->children[j];
+
+        if (var_decl->type == IDENTIFIER)
+        {
+          symbol_t *local_symbol = malloc(sizeof(symbol_t));
+          local_symbol->name = var_decl->data.identifier;
+          local_symbol->type = SYMBOL_LOCAL_VAR;
+          local_symbol->node = var_decl;
+          symbol_table_insert(local_symbols, local_symbol);
+        }
+      }
+    }
+
+    for (size_t i = 0; i < stmt_list->n_children; i++)
+    {
+      bind_names(local_symbols, stmt_list->children[i]);
+    }
+  }
+
+  pop_local_scope(local_symbols);
 
   // Implement bind_names, doing all the things described above
   // Tip: See symbol_hashmap_init() in symbol_table.h, to make new hashmaps for new scopes.
@@ -282,7 +293,7 @@ static void destroy_symbol_tables(void)
   {
     symbol_t *symbol = global_symbols->symbols[i];
 
-    if (symbol == NULL || symbol->type != SYMBOL_FUNCTION)
+    if (!symbol->function_symtable)
     {
       continue;
     }
@@ -298,9 +309,9 @@ static void destroy_symbol_tables(void)
 }
 
 // Declaration of global string list
-char **string_list;
-size_t string_list_len;
-static size_t string_list_capacity;
+char **string_list = NULL;
+size_t string_list_len = 0;
+static size_t string_list_capacity = 0;
 
 // Adds the given string to the global string list, resizing if needed.
 // Takes ownership of the string, and returns its position in the string list.
@@ -362,5 +373,9 @@ static void destroy_string_list(void)
     free(string_list[i]);
   }
   free(string_list);
+
+  string_list = NULL;
+  string_list_len = 0;
+  string_list_capacity = 0;
   // Called during cleanup, free strings, and the memory used by the string list itself
 }

@@ -1,5 +1,5 @@
 run: build exec
-exec: simple-strings
+exec: strings
 build: empty c_build
 empty:
 
