@@ -13,7 +13,7 @@ static const char *REGISTER_PARAMS[6] = {RDI, RSI, RDX, RCX, R8, R9};
 // global counters for generating unique labels
 static size_t if_counter = 0;
 static size_t while_counter = 0;
-static size_t break_counter = 0;
+static size_t innermost_loop = 0;
 
 static void generate_stringtable(void);
 static void generate_global_variables(void);
@@ -447,6 +447,7 @@ static void generate_if_statement(node_t *statement)
 
   // You will need to define your own unique labels for this if statement,
   // so consider using a global variable as a counter to give each label a suffix unique to this if.
+
   size_t current_if_counter = if_counter++;
   node_t *expression = statement->children[0];
   node_t *then_statement = statement->children[1];
@@ -475,18 +476,40 @@ static void generate_if_statement(node_t *statement)
 
 static void generate_while_statement(node_t *statement)
 {
-  // TODO (2.2):
+  // (2.2):
   // Implement while loops, similarily to the way if statements were generated.
   // Remember to make label names unique, and to handle nested while loops.
+
+  size_t current_while_counter = while_counter++;
+  node_t *expression = statement->children[0];
+  node_t *while_statement = statement->children[1];
+
+  innermost_loop = current_while_counter;
+
+  // while
+  LABEL(".WHILE%zu", current_while_counter);
+  generate_expression(expression);
+  CMPQ("$0", RAX);
+  EMIT("je .ENDWHILE%zu", current_while_counter);
+
+  // body
+  generate_statement(while_statement);
+  EMIT("jmp .WHILE%zu", current_while_counter);
+
+  // end
+  LABEL(".ENDWHILE%zu", current_while_counter);
+
+  innermost_loop--;
 }
 
 // Leaves the currently innermost while loop using its end-label
 static void generate_break_statement()
 {
-  // TODO (2.3):
+  // (2.3):
   // Generate the break statement, jumping out past the end of the current innermost while loop.
   // You can use a global variable to keep track of the current innermost call to
   // generate_while_statement().
+  EMIT("jmp .ENDWHILE%zu", innermost_loop);
 }
 
 // Recursively generate the given statement node, and all sub-statements.
