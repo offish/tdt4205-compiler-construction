@@ -1,2 +1,12 @@
+.DS_Store
+.idea
+*.log
+tmp/
 build/
 *.tar.gz
+*.ast
+*.svg
+*.symbols
+*.S
+*.out
+!vsl_programs/*/suggested/*

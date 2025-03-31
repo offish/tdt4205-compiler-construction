@@ -6,7 +6,8 @@ set(VSLC_SOURCES "src/vslc.c"
                  "src/tree.c"
                  "src/graphviz_output.c"
                  "src/symbols.c"
-                 "src/symbol_table.c")
+                 "src/symbol_table.c"
+                 "src/generator.c")
 
 set(VSLC_LEXER_SOURCE "src/scanner.l")
 set(VSLC_PARSER_SOURCE "src/parser.y")
