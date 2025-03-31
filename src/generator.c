@@ -5,17 +5,22 @@
 
 // In the System V calling convention, the first 6 integer parameters are passed in registers
 #define NUM_REGISTER_PARAMS 6
-static const char* REGISTER_PARAMS[6] = {RDI, RSI, RDX, RCX, R8, R9};
+static const char *REGISTER_PARAMS[6] = {RDI, RSI, RDX, RCX, R8, R9};
 
 // Takes in a symbol of type SYMBOL_FUNCTION, and returns how many parameters the function takes
 #define FUNC_PARAM_COUNT(func) ((func)->node->children[1]->n_children)
 
+// global counters for generating unique labels
+static size_t if_counter = 0;
+static size_t while_counter = 0;
+static size_t break_counter = 0;
+
 static void generate_stringtable(void);
 static void generate_global_variables(void);
-static void generate_function(symbol_t* function);
-static void generate_expression(node_t* expression);
-static void generate_statement(node_t* node);
-static void generate_main(symbol_t* first);
+static void generate_function(symbol_t *function);
+static void generate_expression(node_t *expression);
+static void generate_statement(node_t *node);
+static void generate_main(symbol_t *first);
 
 // Entry point for code generation
 void generate_program(void)
@@ -24,10 +29,10 @@ void generate_program(void)
   generate_global_variables();
 
   DIRECTIVE(".text");
-  symbol_t* first_function = NULL;
+  symbol_t *first_function = NULL;
   for (size_t i = 0; i < global_symbols->n_symbols; i++)
   {
-    symbol_t* symbol = global_symbols->symbols[i];
+    symbol_t *symbol = global_symbols->symbols[i];
     if (symbol->type != SYMBOL_FUNCTION)
       continue;
     if (!first_function)
@@ -64,7 +69,7 @@ static void generate_global_variables(void)
   DIRECTIVE(".align 8");
   for (size_t i = 0; i < global_symbols->n_symbols; i++)
   {
-    symbol_t* symbol = global_symbols->symbols[i];
+    symbol_t *symbol = global_symbols->symbols[i];
     if (symbol->type == SYMBOL_GLOBAL_VAR)
     {
       DIRECTIVE(".%s: \t.zero 8", symbol->name);
@@ -83,10 +88,10 @@ static void generate_global_variables(void)
 }
 
 // Global variable used to make the functon currently being generated accessible from anywhere
-static symbol_t* current_function;
+static symbol_t *current_function;
 
 // Prints the entry point. preamble, statements and epilouge of the given function
-static void generate_function(symbol_t* function)
+static void generate_function(symbol_t *function)
 {
   LABEL(".%s", function->name);
   current_function = function;
@@ -113,16 +118,16 @@ static void generate_function(symbol_t* function)
 }
 
 // Generates code for a function call, which can either be a statement or an expression
-static void generate_function_call(node_t* call)
+static void generate_function_call(node_t *call)
 {
-  symbol_t* symbol = call->children[0]->symbol;
+  symbol_t *symbol = call->children[0]->symbol;
   if (symbol->type != SYMBOL_FUNCTION)
   {
     fprintf(stderr, "error: '%s' is not a function\n", symbol->name);
     exit(EXIT_FAILURE);
   }
 
-  node_t* argument_list = call->children[1];
+  node_t *argument_list = call->children[1];
 
   size_t parameter_count = FUNC_PARAM_COUNT(symbol);
   if (parameter_count != argument_list->n_children)
@@ -159,13 +164,13 @@ static void generate_function_call(node_t* call)
 }
 
 // Returns a string for accessing the quadword referenced by node
-static const char* generate_variable_access(node_t* node)
+static const char *generate_variable_access(node_t *node)
 {
   static char result[100];
 
   assert(node->type == IDENTIFIER);
 
-  symbol_t* symbol = node->symbol;
+  symbol_t *symbol = node->symbol;
   switch (symbol->type)
   {
   case SYMBOL_GLOBAL_VAR:
@@ -214,11 +219,11 @@ static const char* generate_variable_access(node_t* node)
  * Once x is evaluated, the address of array[x] is calculated, and stored in the RCX register.
  * The return value is the string "(%rcx)", the assembly for using RCX as an address.
  */
-static const char* generate_array_access(node_t* node)
+static const char *generate_array_access(node_t *node)
 {
   assert(node->type == ARRAY_INDEXING);
 
-  symbol_t* symbol = node->children[0]->symbol;
+  symbol_t *symbol = node->children[0]->symbol;
   if (symbol->type != SYMBOL_GLOBAL_ARRAY)
   {
     fprintf(stderr, "error: symbol '%s' is not an array\n", symbol->name);
@@ -239,7 +244,7 @@ static const char* generate_array_access(node_t* node)
 }
 
 // Generates code to evaluate the expression, and place the result in %rax
-static void generate_expression(node_t* expression)
+static void generate_expression(node_t *expression)
 {
   switch (expression->type)
   {
@@ -257,7 +262,7 @@ static void generate_expression(node_t* expression)
     break;
   case OPERATOR:
   {
-    const char* op = expression->data.operator;
+    const char *op = expression->data.operator;
     if (strcmp(op, "+") == 0)
     {
       generate_expression(expression->children[0]);
@@ -381,10 +386,10 @@ static void generate_expression(node_t* expression)
   }
 }
 
-static void generate_assignment_statement(node_t* statement)
+static void generate_assignment_statement(node_t *statement)
 {
-  node_t* dest = statement->children[0];
-  node_t* expression = statement->children[1];
+  node_t *dest = statement->children[0];
+  node_t *expression = statement->children[1];
 
   // First the right hand side of the assignment is evaluated
   generate_expression(expression);
@@ -398,18 +403,18 @@ static void generate_assignment_statement(node_t* statement)
     // Store rax until the final address of the array element is found,
     // since array index calculation can potentially modify all registers
     PUSHQ(RAX);
-    const char* dest_mem = generate_array_access(dest);
+    const char *dest_mem = generate_array_access(dest);
     POPQ(RAX);
     MOVQ(RAX, dest_mem);
   }
 }
 
-static void generate_print_statement(node_t* statement)
+static void generate_print_statement(node_t *statement)
 {
-  node_t* print_items = statement->children[0];
+  node_t *print_items = statement->children[0];
   for (size_t i = 0; i < print_items->n_children; i++)
   {
-    node_t* item = print_items->children[i];
+    node_t *item = print_items->children[i];
     if (item->type == STRING_LIST_REFERENCE)
     {
       EMIT("leaq strout(%s), %s", RIP, RDI);
@@ -428,23 +433,47 @@ static void generate_print_statement(node_t* statement)
   EMIT("call safe_putchar");
 }
 
-static void generate_return_statement(node_t* statement)
+static void generate_return_statement(node_t *statement)
 {
   generate_expression(statement->children[0]);
   EMIT("jmp .%s.epilogue", current_function->name);
 }
 
-static void generate_if_statement(node_t* statement)
+static void generate_if_statement(node_t *statement)
 {
-  // TODO (2.1):
+  // (2.1):
   // Generate code for emitting both if-then statements, and if-then-else statements.
   // Check the number of children to determine which.
 
   // You will need to define your own unique labels for this if statement,
   // so consider using a global variable as a counter to give each label a suffix unique to this if.
+  size_t current_if_counter = if_counter++;
+  node_t *expression = statement->children[0];
+  node_t *then_statement = statement->children[1];
+
+  // if
+  generate_expression(expression);
+  CMPQ("$0", RAX);
+  EMIT("je .ELSE%zu", current_if_counter);
+
+  // then
+  generate_statement(then_statement);
+  EMIT("jmp .ENDIF%zu", current_if_counter);
+
+  // else
+  LABEL(".ELSE%zu", current_if_counter);
+
+  if (statement->n_children == 3)
+  {
+    node_t *else_statement = statement->children[2];
+    generate_statement(else_statement);
+  }
+
+  // end
+  LABEL(".ENDIF%zu", current_if_counter);
 }
 
-static void generate_while_statement(node_t* statement)
+static void generate_while_statement(node_t *statement)
 {
   // TODO (2.2):
   // Implement while loops, similarily to the way if statements were generated.
@@ -461,7 +490,7 @@ static void generate_break_statement()
 }
 
 // Recursively generate the given statement node, and all sub-statements.
-static void generate_statement(node_t* node)
+static void generate_statement(node_t *node)
 {
   if (node == NULL)
     return;
@@ -472,7 +501,7 @@ static void generate_statement(node_t* node)
   {
     // All handling of pushing and popping scopes has already been done
     // Just generate the statements that make up the statement body, one by one
-    node_t* statement_list = node->children[node->n_children - 1];
+    node_t *statement_list = node->children[node->n_children - 1];
     for (size_t i = 0; i < statement_list->n_children; i++)
       generate_statement(statement_list->children[i]);
     break;
@@ -537,7 +566,7 @@ static void generate_safe_putchar(void)
 
 // Generates the scaffolding for parsing integers from the command line, and passing them to the
 // entry point of the VSL program. The VSL entry function is specified using the parameter "first".
-static void generate_main(symbol_t* first)
+static void generate_main(symbol_t *first)
 {
   // Make the globally available main function
   LABEL("main");
@@ -547,8 +576,8 @@ static void generate_main(symbol_t* first)
   MOVQ(RSP, RBP);
 
   // Which registers argc and argv are passed in
-  const char* argc = RDI;
-  const char* argv = RSI;
+  const char *argc = RDI;
+  const char *argv = RSI;
 
   const size_t expected_args = FUNC_PARAM_COUNT(first);
 
